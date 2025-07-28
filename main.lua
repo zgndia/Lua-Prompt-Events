@@ -25,10 +25,11 @@ local GuiUtils = require(ReplicatedStorage.GuiUtils)
 -- Per-player data table
 local playerData = {}
 
+-- Actions table where every Prompt Action is handled in
 local ACTIONS = {}
 
 local function handlePickRecipe(player, status)
-	local recipeName = "Common" -- Recipe type (only Common for now)
+	local recipeName = "Common" -- Recipe type
 	local duration = 3 -- Text duration
 
 	if status then status.Value = "ready-to-brew" end
@@ -38,16 +39,16 @@ local function handlePickRecipe(player, status)
 	task.wait(1)
 
 	-- Enable the same prompt and rename it
-	local brewPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt")
-	if brewPrompt then
-		brewPrompt.ActionText = "Take Portafilter"
-		remote:FireClient(player, brewPrompt, true)
+	local portafilterPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt")
+	if portafilterPrompt then
+		portafilterPrompt.ActionText = "Take Portafilter"
+		remote:FireClient(player, portafilterPrompt, true)
 	end
 end
 
 local function handlePortafilterPickup(player, status, models, promptObject)
 	
-	if status then status.Value = "empty" end
+	if status then status.Value = "empty" end -- empty portafilter status (no coffee in the portafilter)
 	
 	-- Create tool and update state
 	local tool = ToolUtils.Create(player, "PortafilterTool", EMPTY_PORTAFILTER_ID, models["empty_portafilter"])
@@ -60,7 +61,7 @@ local function handlePortafilterPickup(player, status, models, promptObject)
 	models["portafilter"].Transparency = 1
 	models["portafilter"].CanCollide = false
 
-	-- Change the same prompts action text
+	-- Change the same prompts action text for later
 	promptObject.ActionText = "Make Espresso"
 end
 
@@ -83,7 +84,7 @@ local function handleCoffeeExtraction(player, status, models)
 		local gripRight = currentTool.GripRight
 		local gripUp = currentTool.GripUp
 
-		-- Clone the tool with the extracted coffee
+		-- Create a new tool with the filled portafilter handle
 		local newTool = Instance.new("Tool")
 		local handle = models["filled_portafilter"]:Clone()
 
@@ -96,25 +97,25 @@ local function handleCoffeeExtraction(player, status, models)
 		newTool.RequiresHandle = true
 		newTool.CanBeDropped = false
 		newTool.TextureId = "rbxassetid://" .. FULL_PORTAFILTER_ID
+
+		-- Apply the old tool's position to the new one before equipping
 		newTool.Grip = gripPos
 		newTool.GripForward = gripForward
 		newTool.GripRight = gripRight
 		newTool.GripUp = gripUp
 
-		-- Parent it first
 		newTool.Parent = backpack
 
 		ScriptUtils.cloneScript(ServerStorage, "weldScript", newTool)
 
-		-- Remove old one and equip new
 		currentTool:Destroy()
 		humanoid:EquipTool(newTool)
 	end
 
 	local tool = char:FindFirstChild("PortafilterTool") or player.Backpack:FindFirstChild("PortafilterTool")
 	if status and status.Value == "empty" and tool then
-		tool.TextureId = "rbxassetid://" .. FULL_PORTAFILTER_ID -- Change tool icon
-		status.Value = "filled" -- Change coffee state
+		tool.TextureId = "rbxassetid://" .. FULL_PORTAFILTER_ID
+		status.Value = "filled"
 
 		-- Enable the required prompt for the next step
 		local portafilterPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt")
@@ -125,9 +126,10 @@ local function handleCoffeeExtraction(player, status, models)
 	end
 end
 
-local function handleEspressoMaking(player, status, models, data, promptObject)
+local function handleEspressoMaking(player, status, models, data)
+
 	-- Remove tool and make the portafilter model inside the cafe model visible to simulate brewing
-	remote:FireClient(player, promptObject, false)
+
 	task.spawn(function()
 		ToolUtils.Remove(player, "PortafilterTool")
 
@@ -154,13 +156,7 @@ local function handleEspressoMaking(player, status, models, data, promptObject)
 
 		task.wait(3.5)
 
-		-- Disable glass prompt
-		local glassPrompt = models["glass"]:FindFirstChild("Attachment") and models["glass"].Attachment:FindFirstChild("ProximityPrompt")
-		if glassPrompt then
-			remote:FireClient(player, glassPrompt, false)
-		end
-
-		-- Create espresso glass
+		-- Create a glass with espresso in it
 		local espressoGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Espresso")
 		if espressoGlass then
 			data.clonedGlass = espressoGlass:Clone()
@@ -168,12 +164,11 @@ local function handleEspressoMaking(player, status, models, data, promptObject)
 			data.clonedGlass.Parent = models["cafeModel"]
 		end
 
-		-- Hide empty glass and set its position to where it was before it was moved
+		-- Hide the empty glass and set its position to where it was before it was moved
 		models["glass"].Transparency = 1
 		models["glass"].CanCollide = false
 		models["glass"].Position = data.glasspos
 
-		-- Cleanup
 		if brewSound then
 			brewSound:Stop()
 			brewSound:Destroy()
@@ -182,9 +177,11 @@ local function handleEspressoMaking(player, status, models, data, promptObject)
 end
 
 local function handleMilkSteaming(player, status, models, data)
+
 	-- Add milk to the glass with espresso and get it ready to be served
+
 	task.spawn(function()
-		if status then status.Value = "adding-milk" end -- Change coffee status
+		if status then status.Value = "adding-milk" end
 
 		local glass = data.clonedGlass
 		local primaryPart = glass.PrimaryPart
@@ -216,7 +213,7 @@ local function handleMilkSteaming(player, status, models, data)
 
 		localsound:FireClient(player, "Ding", 1) -- Play the sound locally
 
-		-- Replace with coffee glass
+		-- Clone the Coffee Glass into the workspace after done steaming 
 		local coffeeGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee")
 		if coffeeGlass then
 			local currentPos = glass:GetPivot().Position
@@ -229,12 +226,11 @@ local function handleMilkSteaming(player, status, models, data)
 end
 
 local function handleCoffeeServing(player, status, models, data)
-	-- Serve the coffee
 	task.spawn(function()
 		if status then status.Value = "serving" end
 
 		if data.clonedGlass then
-			data.clonedGlass:Destroy() -- Destroy the coffee part to add the tool to the player's backpack
+			data.clonedGlass:Destroy() -- Destroy the coffee part and add the tool to the player's backpack
 			data.clonedGlass = nil
 		end
 
@@ -246,44 +242,51 @@ local function handleCoffeeServing(player, status, models, data)
 
 		-- Create coffee tool
 		local coffeeModel = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee")
-		if coffeeModel then
-			local tool = Instance.new("Tool")
-			tool.Name = "Coffee"
-			tool.CanBeDropped = false
-			tool.RequiresHandle = true
-			tool.TextureId = "rbxassetid://" .. GLASS_OF_COFFEE_ID
+		if not coffeeModel then
+			warn("coffee model cannot be found")
+			return
+		end
 
-			local modelClone = coffeeModel:Clone()
-			local handle = modelClone:FindFirstChild("Handle")
-			if handle then
-				handle.Name = "Handle"
-				handle.Anchored = false
-				handle.CanCollide = false
-				handle.Massless = true
-				handle.Parent = tool
+		local tool = Instance.new("Tool")
+		tool.Name = "Coffee"
+		tool.CanBeDropped = false
+		tool.RequiresHandle = true
+		tool.TextureId = "rbxassetid://" .. GLASS_OF_COFFEE_ID
 
-				handle.Attachment:Destroy()
+		local modelClone = coffeeModel:Clone()
+		local handle = modelClone:FindFirstChild("Handle")
+		
+		if not handle then
+			tool:Destroy()
+			warn("handle cannot be found")
+			return
+		end
 
-				for _, part in ipairs(modelClone:GetChildren()) do
-					if part:IsA("BasePart") and part ~= handle then
-						part.Anchored = false
-						part.CanCollide = false
-						part.Massless = true
-						part.Parent = tool
+		handle.Name = "Handle"
+		handle.Anchored = false
+		handle.CanCollide = false
+		handle.Massless = true
+		handle.Parent = tool
 
-						local weld = Instance.new("WeldConstraint")
-						weld.Part0 = handle
-						weld.Part1 = part
-						weld.Parent = handle
-					end
-				end
+		handle.Attachment:Destroy() -- Destroy the proximity prompt so it won't display the prompt when tool is equipped
 
-				ScriptUtils.cloneScript(ServerStorage, "glassWeldScript", tool)
-				tool.Parent = player.Backpack
-			else
-				tool:Destroy()
+		for _, part in ipairs(modelClone:GetChildren()) do
+			if part:IsA("BasePart") and part ~= handle then
+				part.Anchored = false
+				part.CanCollide = false
+				part.Massless = true
+				part.Parent = tool
+
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = handle
+				weld.Part1 = part
+				weld.Parent = handle
 			end
 		end
+
+		ScriptUtils.cloneScript(ServerStorage, "glassWeldScript", tool)
+		tool.Parent = player.Backpack
+
 	end)
 end
 
