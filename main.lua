@@ -27,26 +27,35 @@ local GuiUtils = require(ReplicatedStorage.GuiUtils)
 -- Per-player data table
 local playerData = {}
 
+local function findPrompt(player, Name) -- Function to find the prompt instances easily
+	for _, prompt in ipairs(playerData[player].prompts) do
+		if prompt.Name == Name then
+			return prompt
+		end
+	end
+	return nil
+end
+
 -- Actions table where every Prompt Action is handled in
 local ACTIONS = {}
 
 local function handlePickRecipe(player, status)
 
 	if not status or status.Value ~= "recipe-selection" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
+	status.Value = "recipe-picked" -- Change status value for the current coffee making status (The recipe is picked)
+
 	local recipeName = "Common" -- Example recipe type
 	local duration = 3 -- The duration the text will display for
-
-	if status then status.Value = "recipe-picked" end -- Change status value for the current coffee making status (The recipe is picked)
 
 	GuiUtils.Text(player, "You've chosen the [" .. recipeName .. "] recipe!", duration, {76,0,153}) -- Uses GuiUtils module to display text on the screen
 
 	task.wait(1)
 
-	local portafilterPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt") -- Get portafilter proximity prompt object
+	local portafilterPrompt = findPrompt(player, "Portafilter") -- Get portafilter proximity prompt object
 
 	if not portafilterPrompt then -- Check if proximity prompt exists
 		warn("portafilterPrompt doesn't exist!")
@@ -60,14 +69,14 @@ end
 local function handlePortafilterPickup(player, status, models, promptObject)
 
 	if not status or status.Value ~= "recipe-picked" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
-	if status then status.Value = "portafilter-picked-up" end -- Change status value for the current coffee making status (The portafilter is picked up)
+	status.Value = "portafilter-picked-up" -- Change status value for the current coffee making status (The portafilter is picked up)
 
-	local tool = ToolUtils.Create(player, "PortafilterTool", EMPTY_PORTAFILTER_ID, models["empty_portafilter"]) -- Create tool for the player to act as the portafilter
-	tool.Parent = player.Backpack -- Parent it to the player backpack
+	local tool
+	tool = ToolUtils.Create(player, "PortafilterTool", EMPTY_PORTAFILTER_ID, models["empty_portafilter"]) -- Create tool for the player to act as the portafilter
 
 	ScriptUtils.cloneScript(ServerStorage ,"weldScript", tool) -- Clone the selected scripts and set their parent as the tool - Tells the game to how to weld the tool
 	ScriptUtils.cloneScript(ServerStorage, "ToolPrompt", tool) -- Same as above - Tells the server to enable prompts when tool is equipped
@@ -76,6 +85,8 @@ local function handlePortafilterPickup(player, status, models, promptObject)
 	models["portafilter"].Transparency = 1
 	models["portafilter"].CanCollide = false -- Refrain from colliding with anything while the model is invisible
 
+	tool.Parent = player.Backpack -- Parent it to the player backpack after scripts are cloned into the tool and the original model disappeared
+
 	promptObject.ActionText = "Make Espresso" -- Change the prompt action text for the next step
 end
 
@@ -83,12 +94,14 @@ local function handleCoffeeExtraction(player, status, models)
 	-- Coffee extraction into the portafilter event
 
 	if not status or status.Value ~= "portafilter-picked-up" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
+	status.Value = "coffee-extracted" -- Change status value for the current coffee making status (The coffee is successfully extracted into the portafilter)
+
 	local char = player.Character -- Get player character because the tool is parented inside the character while the tool is equipped - This event only triggers while the tool is equipped
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local humanoid = char:WaitForChild("Humanoid", 2) or error("Humanoid missing")
 	local currentTool = char:FindFirstChild("PortafilterTool") -- Get the equipped tool object
 
 	if not humanoid or not currentTool then -- Check if humanoid and currentTool exists
@@ -125,16 +138,16 @@ local function handleCoffeeExtraction(player, status, models)
 	newTool.GripRight = gripRight
 	newTool.GripUp = gripUp
 
-	newTool.Parent = backpack
-
 	ScriptUtils.cloneScript(ServerStorage, "weldScript", newTool) -- Clone the selected scripts and set their parent as the tool - Tells the game to how to weld the tool
-
+	ScriptUtils.cloneScript(ServerStorage, "CoffeeToolPrompt", newTool) -- Clone the selected scripts and set their parent as the tool - Forces player to equip the tool to trigger next prompt
+	
 	currentTool:Destroy() -- Destroy the tool that was equipped before
+
+	newTool.Parent = backpack -- Parent it after everything is set and right before equipping
+
 	humanoid:EquipTool(newTool) -- Equip the new tool
 
-	status.Value = "coffee-extracted" -- Change status value for the current coffee making status (The coffee is successfully extracted into the portafilter)
-
-	local portafilterPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt") -- Get the required proximity prompt object for the next step
+	local portafilterPrompt = findPrompt(player, "Portafilter") -- Get the required proximity prompt object for the next step
 
 	if not portafilterPrompt then -- Check if the required proximity prompt exist
 		warn("portafilterPrompt doesn't exist!")
@@ -149,13 +162,13 @@ local function handleEspressoMaking(player, status, models, data)
 	-- Remove tool and make the portafilter model inside the cafe model visible to simulate brewing
 
 	if not status or status.Value ~= "coffee-extracted" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
-	ToolUtils.Remove(player, "PortafilterTool") -- Remove the equipped tool
+	status.Value = "pouring-espresso" -- Change status value for the current coffee making status (The extracted coffee is being poured into a cup as the espresso)
 
-	if status then status.Value = "pouring-espresso" end -- Change status value for the current coffee making status (The extracted coffee is being poured into a cup as the espresso)
+	ToolUtils.Remove(player, "PortafilterTool") -- Remove the equipped tool
 
 	models["portafilter"].Transparency = 0 -- Set the transparency of the portafilter inside the cafe model to 0 for it to be visible
 	models["portafilter"].CanCollide = true -- Return its collision back
@@ -209,11 +222,11 @@ local function handleMilkSteaming(player, status, models, data)
 	-- Add milk to the glass with espresso and get it ready to be served
 
 	if not status or status.Value ~= "pouring-espresso" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
-	if status then status.Value = "pouring-milk" end -- Change status value for the current coffee making status (Steamed milk pouring into the espresso cup to make coffee)
+	status.Value = "pouring-milk" -- Change status value for the current coffee making status (Steamed milk pouring into the espresso cup to make coffee)
 
 	local glass = data.clonedGlass -- Get the current glass instance set for the player (which is the glass with espresso in it for this function to be triggered)
 	local primaryPart = glass.PrimaryPart -- Get primaryPart since every glass instance is a group model
@@ -245,8 +258,9 @@ local function handleMilkSteaming(player, status, models, data)
 	steamSound.MaxDistance = 30
 	steamSound:Play()
 
-	-- Wait for it to end before continuing
-	steamSound.Ended:Wait()
+	task.wait(steamSound.TimeLength) -- Wait for the sound to end before continuing
+
+	steamSound:Stop()
 	steamSound:Destroy()
 
 	localsound:FireClient(player, "Ding", 1) -- Play the sound locally
@@ -270,11 +284,11 @@ end
 local function handleCoffeeServing(player, status, models, data)
 
 	if not status or status.Value ~= "pouring-milk" then -- Don't start the next step unless a certain value is set
-		warn("This isn't the current step for this player!")
+		warn("This isn't the current step for this player or the status instance doesn't exist!")
 		return
 	end
 
-	if status then status.Value = "serving-coffee" end -- Change status value for the current coffee making status (Coffee is ready to be served.)
+	status.Value = "serving-coffee" -- Change status value for the current coffee making status (Coffee is ready to be served.)
 
 	if data.clonedGlass then
 		data.clonedGlass:Destroy() -- Destroy the coffee part inside the cafe model and add it as a tool to the player's backpack
@@ -295,8 +309,9 @@ local function handleCoffeeServing(player, status, models, data)
 		return
 	end
 
-	-- Some tool properties
-	local tool = Instance.new("Tool")
+	-- Create tool and set its properties
+	local tool
+	tool = Instance.new("Tool")
 	tool.Name = "Coffee"
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
@@ -319,10 +334,12 @@ local function handleCoffeeServing(player, status, models, data)
 	handle.Massless = true
 	handle.Parent = tool
 
-	handle:FindFirstChild("Attachment"):Destroy() -- Destroy the proximity prompt so it won't display the prompt when tool is equipped (the proximity prompt is parented under 'Attachment')
+	local att = handle:FindFirstChild("Attachment")
+
+	if att then att:Destroy() end -- Destroy the proximity prompt so it won't display the prompt when tool is equipped (the proximity prompt is parented under 'Attachment')
 
 	for _, part in ipairs(modelClone:GetChildren()) do
-		if part:IsA("BasePart") == false or part == handle then return end -- If the part isn't a BasePart or the part is the handle don't apply the codes below
+		if part:IsA("BasePart") == false or part == handle then continue end -- If the part isn't a BasePart or the part is the handle don't apply the properties below
 
 		-- Apply the same properties for any other possible part that is parented to the cloned model
 		part.Anchored = false
@@ -337,7 +354,7 @@ local function handleCoffeeServing(player, status, models, data)
 	end
 
 	ScriptUtils.cloneScript(ServerStorage, "glassWeldScript", tool) -- Clones an already written weld script for the glass and parents it to the tool
-	tool.Parent = player.Backpack -- Finally parents the tool into the players backpack
+	tool.Parent = player.Backpack -- Parent the tool into the players backpack after everything is set
 end
 
 -- Add every function into the "ACTIONS" table
@@ -396,69 +413,80 @@ local function onPromptTriggered(promptObject, player)
 end
 
 -- Player management
-game.Players.PlayerAdded:Connect(function(player)
+local function assignPlayerData(player)
 
+	-- Create a coffee status value to tell what stage the player is in for later
 	local status = Instance.new("StringValue")
 	status.Name = "CoffeeStatus"
 	status.Value = "recipe-selection"
 	status.Parent = player
-	-- Wait for the player's character to load
-	player.CharacterAdded:Connect(function(character)
-		-- Give some time for everything to load
-		task.wait(2)
 
-		-- Get the cafe name from the player's MyCafe value
-		local myCafeValue = player:WaitForChild("MyCafe") -- Wait up to 5 seconds
-		if not myCafeValue then
-			warn("MyCafe value not found for player: "..player.Name)
-			return
-		end
+	-- Get the cafe name from the player's MyCafe value which is created in another script
+	local myCafeValue = player:WaitForChild("MyCafe", 5) -- Wait up to 5 seconds
+	if not myCafeValue then
+		warn("MyCafe value not found for player: "..player.Name)
+		return
+	end
 
-		local cafeName = tostring(myCafeValue.Value)
-		if not cafeName or cafeName == "" then
-			warn("Player "..player.Name.." has no cafe assigned in MyCafe value")
-			return
-		end
+	-- Check if MyCafe value is changed to a cafe name already
+	local cafeName = tostring(myCafeValue.Value)
+	if not cafeName or cafeName == "" then
+		warn("Player "..player.Name.." has no cafe assigned in MyCafe value")
+		return
+	end
 
-		-- Find the cafe model in workspace
-		local cafe = workspace:FindFirstChild(cafeName)
-		if not cafe then
-			warn("Cafe model '"..cafeName.."' not found in workspace for "..player.Name)
-			return
-		end
+	-- Find the cafe model in workspace
+	local cafe = workspace:FindFirstChild(cafeName)
+	if not cafe then
+		warn("Cafe model '"..cafeName.."' not found in workspace for "..player.Name)
+		return
+	end
 
-		-- Assign playerData values for the player
-		playerData[player] = {
-			cafe = cafe,
-			clonedGlass = nil,
-			glasspos = nil
-		}
+	-- Assign playerData values for the player
+	playerData[player] = {
+		cafe = cafe,
+		prompts = {},
+		clonedGlass = nil, -- There is 3 different glass types in this script, so we have to store which glass type we are at for each player
+		glasspos = nil -- We need the starting position value of the glasses to animate them
+	}
 
-		-- Disable all prompts in the cafe
-		for _, descendant in ipairs(cafe:GetDescendants()) do
-			if not descendant:IsA("ProximityPrompt") then return end
+	-- Disable all prompts in the cafe for the client and cache prompts
+	for _, descendant in ipairs(cafe:GetDescendants()) do
+		if descendant:IsA("ProximityPrompt") then
+			table.insert(playerData[player].prompts, descendant)
 			remote:FireClient(player, descendant, false) -- Disables proximity prompt for the client
 		end
-		
-		local model = playerData[player].cafe:FindFirstChild("Portafilter")
-		local Portafilterprompt = model:FindFirstDescendant("ProximityPrompt")
-		
-		remote:FireClient(player, Portafilterprompt, true) -- Enable the first prompt required for the coffee making loop
-		
+	end
+
+	local model = playerData[player].cafe:FindFirstChild("Portafilter")
+	local Portafilterprompt = findPrompt(player, "Portafilter")
+
+	remote:FireClient(player, Portafilterprompt, true) -- Enable the first prompt required for the coffee making loop
+end
+
+game.Players.PlayerAdded:Connect(function(player)
+
+	-- Wait for the player's character to load
+	player.CharacterAdded:Connect(function()
+		task.wait(1) -- Wait a while before calling the function
+		assignPlayerData(player)
 	end)
 
-	-- Handle cases where character loads before the MyCafe value is set
-	player:WaitForChild("MyCafe").Changed:Connect(function()
+	local conn
+	conn = player:WaitForChild("MyCafe").Changed:Connect(function() -- Handle cases where character loads before the MyCafe value is set
 		if player.Character then
-			-- Re-run cafe assignment when MyCafe value changes
-			player.CharacterAdded:Fire(player.Character)
+			assignPlayerData(player)
+		end
+		if conn then
+			conn:Disconnect() -- Disconnect after playerData is created
+			conn = nil
 		end
 	end)
 end)
 
 game.Players.PlayerRemoving:Connect(function(player)
 	if playerData[player] then
-		if playerData[player].clonedGlass then -- If they left when there was a cloned glass, destroy it
+		if playerData[player].clonedGlass then -- If the player left when there was a cloned glass, destroy it
 			playerData[player].clonedGlass:Destroy()
 		end
 		playerData[player] = nil -- Reset each player's playerdata upon leaving
