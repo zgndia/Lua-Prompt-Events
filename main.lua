@@ -28,7 +28,7 @@ local GuiUtils = require(ReplicatedStorage.GuiUtils)
 local playerData = {}
 
 local function findPrompt(player, Name) -- Function to find the prompt instances easily
-	for _, prompt in ipairs(playerData[player].prompts) do
+	for _, prompt in ipairs(playerData[player].prompts) do -- Gets every cached proximity prompt inside the playerData
 		if prompt.Name == Name then
 			return prompt
 		end
