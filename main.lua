@@ -443,7 +443,7 @@ game.Players.PlayerAdded:Connect(function(player)
 		local model = playerData[player].cafe:FindFirstChild("Portafilter")
 		local Portafilterprompt = model:FindFirstDescendant("ProximityPrompt")
 		
-		remote:FireClient(player, Portafilterprompt, true) -- Enable one of the prompts
+		remote:FireClient(player, Portafilterprompt, true) -- Enable the first prompt required for the coffee making loop
 		
 	end)
 
