@@ -63,9 +63,9 @@ local function handlePortafilterPickup(player, status, models, promptObject)
 		warn("This isn't the current step for this player!")
 		return
 	end
-	
+
 	if status then status.Value = "portafilter-picked-up" end -- Change status value for the current coffee making status (The portafilter is picked up)
-	
+
 	local tool = ToolUtils.Create(player, "PortafilterTool", EMPTY_PORTAFILTER_ID, models["empty_portafilter"]) -- Create tool for the player to act as the portafilter
 	tool.Parent = player.Backpack -- Parent it to the player backpack
 
@@ -95,7 +95,7 @@ local function handleCoffeeExtraction(player, status, models)
 		warn("Either the humanoid or the equipped tool is nil.")
 		return
 	end
-	
+
 	local backpack = player:FindFirstChild("Backpack")
 
 	-- Store current tool's Grip
@@ -131,7 +131,7 @@ local function handleCoffeeExtraction(player, status, models)
 
 	currentTool:Destroy() -- Destroy the tool that was equipped before
 	humanoid:EquipTool(newTool) -- Equip the new tool
-		
+
 	status.Value = "coffee-extracted" -- Change status value for the current coffee making status (The coffee is successfully extracted into the portafilter)
 
 	local portafilterPrompt = management.getPart(player, playerData, "Portafilter", "Union", "Attachment", "ProximityPrompt") -- Get the required proximity prompt object for the next step
@@ -312,7 +312,7 @@ local function handleCoffeeServing(player, status, models, data)
 		-- Clone coffee model and make it a handle
 		local modelClone = coffeeModel:Clone()
 		local handle = modelClone:FindFirstChild("Handle")
-		
+
 		if not handle then
 			tool:Destroy()
 			warn("handle cannot be found")
@@ -359,15 +359,15 @@ ACTIONS["Serve Coffee"] = handleCoffeeServing
 
 -- Handles every proximity prompt trigger in the game
 local function onPromptTriggered(promptObject, player)
-	
+
 	local status = player:FindFirstChild("CoffeeStatus") -- Get status instance for the functions inside the Actions table
 	local data = playerData[player] -- Get player data for the functions inside the Actions table
-	
+
 	if not playerData[player] or not playerData[player].cafe then
 		warn("Player has no cafe assigned: " .. player.Name)
 		return -- Player needs to have a cafe assigned in order to trigger the prompts
 	end
-	
+
 	local models = {
 		empty_portafilter = ServerStorage.Portafilters:FindFirstChild("empty-portafilter"),
 		filled_portafilter = ServerStorage.Portafilters:FindFirstChild("filled-portafilter"),
@@ -391,7 +391,7 @@ local function onPromptTriggered(promptObject, player)
 
 	-- Immediately disable prompt to prevent re-triggering
 	remote:FireClient(player, promptObject, false) -- Disables prompt for the client
-	
+
 	local handler = ACTIONS[promptObject.ActionText] -- The action texts are set for every functions inside actions table
 	if handler then -- If action text is inside the actions table
 		handler(player, status, models, data, promptObject) -- Provide the variables required for each function
@@ -402,7 +402,7 @@ end
 
 -- Player management
 game.Players.PlayerAdded:Connect(function(player)
-	
+
 	local status = Instance.new("StringValue")
 	status.Name = "CoffeeStatus"
 	status.Value = "recipe-selection"
@@ -439,12 +439,17 @@ game.Players.PlayerAdded:Connect(function(player)
 			glasspos = nil
 		}
 
-		-- Enable all prompts in the cafe
+		-- Disable all prompts in the cafe
 		for _, descendant in ipairs(cafe:GetDescendants()) do
-			if descendant:IsA("ProximityPrompt") and descendant.Parent.Parent.Parent.Name ~= "Glass" and descendant.Parent.Parent.Parent.Name ~= "Extractor" then
-				remote:FireClient(player, descendant, true) -- Enables proximity prompt for the client
-			end
+			if not descendant:IsA("ProximityPrompt") then return end
+			remote:FireClient(player, descendant, false) -- Disables proximity prompt for the client
 		end
+		
+		local model = playerData[player].cafe:FindFirstChild("Portafilter")
+		local Portafilterprompt = model:FindFirstDescendant("ProximityPrompt")
+		
+		remote:FireClient(player, Portafilterprompt, true) -- Enable one of the prompts
+		
 	end)
 
 	-- Handle cases where character loads before the MyCafe value is set
