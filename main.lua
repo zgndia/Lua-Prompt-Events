@@ -148,129 +148,123 @@ end
 local function handleEspressoMaking(player, status, models, data)
 	-- Remove tool and make the portafilter model inside the cafe model visible to simulate brewing
 
-	task.spawn(function() -- Task.spawn so that the moving animation won't have trouble when this function is triggered more than once at the same time
+	if not status or status.Value ~= "coffee-extracted" then -- Don't start the next step unless a certain value is set
+		warn("This isn't the current step for this player!")
+		return
+	end
 
-		if not status or status.Value ~= "coffee-extracted" then -- Don't start the next step unless a certain value is set
-			warn("This isn't the current step for this player!")
-			return
-		end
+	ToolUtils.Remove(player, "PortafilterTool") -- Remove the equipped tool
 
-		ToolUtils.Remove(player, "PortafilterTool") -- Remove the equipped tool
+	if status then status.Value = "pouring-espresso" end -- Change status value for the current coffee making status (The extracted coffee is being poured into a cup as the espresso)
 
-		if status then status.Value = "pouring-espresso" end -- Change status value for the current coffee making status (The extracted coffee is being poured into a cup as the espresso)
+	models["portafilter"].Transparency = 0 -- Set the transparency of the portafilter inside the cafe model to 0 for it to be visible
+	models["portafilter"].CanCollide = true -- Return its collision back
 
-		models["portafilter"].Transparency = 0 -- Set the transparency of the portafilter inside the cafe model to 0 for it to be visible
-		models["portafilter"].CanCollide = true -- Return its collision back
+	if not sound then -- Check if the required sound instance exists
+		warn("'sound' doesn't exist!")
+		return
+	end
 
-		if not sound then -- Check if the required sound instance exists
-			warn("'sound' doesn't exist!")
-			return
-		end
+	local brewSound = sound:Clone()
+	brewSound.Parent = models["portafilter"] -- Parent it into the workspace to simulate 3d sfx
+	brewSound.Volume = 1
+	brewSound.MaxDistance = 30
+	brewSound:Play()
 
-		local brewSound = sound:Clone()
-		brewSound.Parent = models["portafilter"] -- Parent it into the workspace to simulate 3d sfx
-		brewSound.Volume = 1
-		brewSound.MaxDistance = 30
-		brewSound:Play()
+	local startCFrame = models["glass"].CFrame -- Save the start position of the glass into a variable
 
-		local startCFrame = models["glass"].CFrame -- Save the start position of the glass into a variable
+	-- Animate the glass to go under the espresso machine to simulate the espresso pouring into the glass
+	animate.Model(startCFrame * CFrame.new(-0.154 * 50, 0, 0), 1.5, models["glass"])
+	animate.Model(startCFrame * CFrame.new(-0.154 * 50, 0, -0.1 * 10), 0.36, models["glass"])
 
-		-- Animate the glass to go under the espresso machine to simulate the espresso pouring into the glass
-		animate.Model(startCFrame * CFrame.new(-0.154 * 50, 0, 0), 1.5, models["glass"])
-		animate.Model(startCFrame * CFrame.new(-0.154 * 50, 0, -0.1 * 10), 0.36, models["glass"])
+	task.wait(3.5)
 
-		task.wait(3.5)
+	local espressoGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Espresso") -- Get the espresso poured glass model from the serverstorage
 
-		local espressoGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Espresso") -- Get the espresso poured glass model from the serverstorage
+	if not espressoGlass then
+		warn("espressoGlass doesn't exist!")
+		return
+	end
 
-		if not espressoGlass then
-			warn("espressoGlass doesn't exist!")
-			return
-		end
+	data.clonedGlass = espressoGlass:Clone()
+	data.clonedGlass:PivotTo(CFrame.new(models["glass"].Position)) -- Position it to the empty glass' position
+	data.clonedGlass.Parent = models["cafeModel"] -- Parent it under player's cafe model
 
-		data.clonedGlass = espressoGlass:Clone()
-		data.clonedGlass:PivotTo(CFrame.new(models["glass"].Position)) -- Position it to the empty glass' position
-		data.clonedGlass.Parent = models["cafeModel"] -- Parent it under player's cafe model
+	models["glass"].Transparency = 1
+	models["glass"].CanCollide = false -- Disable collision since the glass is invisible
+	models["glass"].Position = data.glasspos -- Set the glass' position to where it was before it was moved
 
-		models["glass"].Transparency = 1
-		models["glass"].CanCollide = false -- Disable collision since the glass is invisible
-		models["glass"].Position = data.glasspos -- Set the glass' position to where it was before it was moved
+	if not brewSound then
+		warn("brewSound doesn't exist!")
+		return
+	end
 
-		if not brewSound then
-			warn("brewSound doesn't exist!")
-			return
-		end
-
-		-- Cleanup
-		brewSound:Stop()
-		brewSound:Destroy()
-	end)
+	-- Cleanup
+	brewSound:Stop()
+	brewSound:Destroy()
 end
 
 local function handleMilkSteaming(player, status, models, data)
 
 	-- Add milk to the glass with espresso and get it ready to be served
 
-	task.spawn(function() -- Task.spawn so that the moving animation won't have trouble when this function is triggered more than once at the same time
+	if not status or status.Value ~= "pouring-espresso" then -- Don't start the next step unless a certain value is set
+		warn("This isn't the current step for this player!")
+		return
+	end
 
-		if not status or status.Value ~= "pouring-espresso" then -- Don't start the next step unless a certain value is set
-			warn("This isn't the current step for this player!")
-			return
-		end
+	if status then status.Value = "pouring-milk" end -- Change status value for the current coffee making status (Steamed milk pouring into the espresso cup to make coffee)
 
-		if status then status.Value = "pouring-milk" end -- Change status value for the current coffee making status (Steamed milk pouring into the espresso cup to make coffee)
+	local glass = data.clonedGlass -- Get the current glass instance set for the player (which is the glass with espresso in it for this function to be triggered)
+	local primaryPart = glass.PrimaryPart -- Get primaryPart since every glass instance is a group model
 
-		local glass = data.clonedGlass -- Get the current glass instance set for the player (which is the glass with espresso in it for this function to be triggered)
-		local primaryPart = glass.PrimaryPart -- Get primaryPart since every glass instance is a group model
+	if not glass or not primaryPart then -- Check if the glass and the primaryPart of the glass exists
+		warn("Either the glass model or the primaryPart of the glass model doesn't exist.")
+		return
+	end
 
-		if not glass or not primaryPart then -- Check if the glass and the primaryPart of the glass exists
-			warn("Either the glass model or the primaryPart of the glass model doesn't exist.")
-			return
-		end
+	local startCFrame = primaryPart.CFrame -- Get the current CFrame of the primaryPart before moving it
 
-		local startCFrame = primaryPart.CFrame -- Get the current CFrame of the primaryPart before moving it
+	local isInverted = management.getCafeOrientation(player) -- Get cafe orientation for the player, some cafe's are rotated by 90 degrees so certain animations should be inverted
+	local directionMultiplier = isInverted and -1 or 1 -- directionMultiplier is -1 if the cafe model is inverted, 1 if not
 
-		local isInverted = management.getCafeOrientation(player) -- Get cafe orientation for the player, some cafe's are rotated by 90 degrees so certain animations should be inverted
-		local directionMultiplier = isInverted and -1 or 1 -- directionMultiplier is -1 if the cafe model is inverted, 1 if not
+	-- Animate the model to go under the steaming machine to simulate steaming
+	animate.Model(startCFrame * CFrame.new((0.0343 * 50) * directionMultiplier, 0, 0), 0.9, glass) -- Use directionMultiplier to prevent inverted animation issues
+	animate.Model(startCFrame * CFrame.new((0.0343 * 50) * directionMultiplier, 0, (0.0495 * 10) * directionMultiplier), 0.36, glass) -- Use directionMultiplier to prevent inverted animation issues
 
-		-- Animate the model to go under the steaming machine to simulate steaming
-		animate.Model(startCFrame * CFrame.new((0.0343 * 50) * directionMultiplier, 0, 0), 0.9, glass) -- Use directionMultiplier to prevent inverted animation issues
-		animate.Model(startCFrame * CFrame.new((0.0343 * 50) * directionMultiplier, 0, (0.0495 * 10) * directionMultiplier), 0.36, glass) -- Use directionMultiplier to prevent inverted animation issues
+	if not sound2 then -- Check if the second sound instance that will be used exists (steaming sound)
+		warn("'sound2' doesn't exist.")
+		return
+	end
 
-		if not sound2 then -- Check if the second sound instance that will be used exists (steaming sound)
-			warn("'sound2' doesn't exist.")
-			return
-		end
+	-- Play steaming sound
 
-		-- Play steaming sound
+	local steamSound = sound2:Clone()
+	steamSound.Parent = glass:FindFirstChild("Glass") or glass -- Parent the sound to the glass model to simulate 3d sound effect
+	steamSound.Volume = 1
+	steamSound.MaxDistance = 30
+	steamSound:Play()
 
-		local steamSound = sound2:Clone()
-		steamSound.Parent = glass:FindFirstChild("Glass") or glass -- Parent the sound to the glass model to simulate 3d sound effect
-		steamSound.Volume = 1
-		steamSound.MaxDistance = 30
-		steamSound:Play()
+	-- Wait for it to end before continuing
+	steamSound.Ended:Wait()
+	steamSound:Destroy()
 
-		-- Wait for it to end before continuing
-		steamSound.Ended:Wait()
-		steamSound:Destroy()
+	localsound:FireClient(player, "Ding", 1) -- Play the sound locally
 
-		localsound:FireClient(player, "Ding", 1) -- Play the sound locally
+	-- Clone the Glass with the coffee in it into the workspace after done steaming 
 
-		-- Clone the Glass with the coffee in it into the workspace after done steaming 
+	local coffeeGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee") -- Get the coffee glass model from serverstorage
 
-		local coffeeGlass = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee") -- Get the coffee glass model from serverstorage
+	if not coffeeGlass then
+		warn("coffeeGlass doesn't exist.")
+		return
+	end
 
-		if not coffeeGlass then
-			warn("coffeeGlass doesn't exist.")
-			return
-		end
-
-		local currentPos = glass:GetPivot().Position
-		glass:Destroy()
-		data.clonedGlass = coffeeGlass:Clone()
-		data.clonedGlass:PivotTo(CFrame.new(currentPos)) -- Uses the old glass pos for the new one
-		data.clonedGlass.Parent = models["cafeModel"] -- Parents it to the player's cafe model
-	end)
+	local currentPos = glass:GetPivot().Position
+	glass:Destroy()
+	data.clonedGlass = coffeeGlass:Clone()
+	data.clonedGlass:PivotTo(CFrame.new(currentPos)) -- Uses the old glass pos for the new one
+	data.clonedGlass.Parent = models["cafeModel"] -- Parents it to the player's cafe model
 end
 
 local function handleCoffeeServing(player, status, models, data)
@@ -393,11 +387,15 @@ local function onPromptTriggered(promptObject, player)
 	remote:FireClient(player, promptObject, false) -- Disables prompt for the client
 
 	local handler = ACTIONS[promptObject.ActionText] -- The action texts are set for every functions inside actions table
-	if handler then -- If action text is inside the actions table
-		handler(player, status, models, data, promptObject) -- Provide the variables required for each function
-	else
+
+	if not handler then
 		warn("Unknown action:", promptObject.ActionText)
+		return
 	end
+
+	task.spawn(function() -- Task.spawn so that the functions won't have trouble when the onPromptTriggered function is triggered more than once at the same time
+		handler(player, status, models, data, promptObject) -- Provide the variables required for each function
+	end)
 end
 
 -- Player management
