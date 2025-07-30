@@ -268,79 +268,76 @@ local function handleMilkSteaming(player, status, models, data)
 end
 
 local function handleCoffeeServing(player, status, models, data)
-	task.spawn(function()
 
-		if not status or status.Value ~= "pouring-milk" then -- Don't start the next step unless a certain value is set
-			warn("This isn't the current step for this player!")
-			return
-		end
+	if not status or status.Value ~= "pouring-milk" then -- Don't start the next step unless a certain value is set
+		warn("This isn't the current step for this player!")
+		return
+	end
 
-		if status then status.Value = "serving-coffee" end -- Change status value for the current coffee making status (Coffee is ready to be served.)
+	if status then status.Value = "serving-coffee" end -- Change status value for the current coffee making status (Coffee is ready to be served.)
 
-		if data.clonedGlass then
-			data.clonedGlass:Destroy() -- Destroy the coffee part inside the cafe model and add it as a tool to the player's backpack
-			data.clonedGlass = nil -- Reset clonedGlass model for the player 
-		end
+	if data.clonedGlass then
+		data.clonedGlass:Destroy() -- Destroy the coffee part inside the cafe model and add it as a tool to the player's backpack
+		data.clonedGlass = nil -- Reset clonedGlass model for the player 
+	end
 
-		-- Make the empty (original) glass visible
-		if models["glass"] then
-			models["glass"].Transparency = 0.3
-			models["glass"].CanCollide = true
-		end
+	-- Make the empty (original) glass visible
+	if models["glass"] then
+		models["glass"].Transparency = 0.3
+		models["glass"].CanCollide = true
+	end
 
-		-- Create coffee tool
+	-- Create coffee tool
 
-		local coffeeModel = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee") -- Get the coffee model from serverstorage
-		if not coffeeModel then
-			warn("coffee model cannot be found")
-			return
-		end
+	local coffeeModel = ServerStorage["Glass Forms"]:FindFirstChild("Glass of Coffee") -- Get the coffee model from serverstorage
+	if not coffeeModel then
+		warn("coffee model cannot be found")
+		return
+	end
 
-		-- Some tool properties
-		local tool = Instance.new("Tool")
-		tool.Name = "Coffee"
-		tool.CanBeDropped = false
-		tool.RequiresHandle = true
-		tool.TextureId = "rbxassetid://" .. GLASS_OF_COFFEE_ID
+	-- Some tool properties
+	local tool = Instance.new("Tool")
+	tool.Name = "Coffee"
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool.TextureId = "rbxassetid://" .. GLASS_OF_COFFEE_ID
 
-		-- Clone coffee model and make it a handle
-		local modelClone = coffeeModel:Clone()
-		local handle = modelClone:FindFirstChild("Handle")
+	-- Clone coffee model and make it a handle
+	local modelClone = coffeeModel:Clone()
+	local handle = modelClone:FindFirstChild("Handle")
 
-		if not handle then
-			tool:Destroy()
-			warn("handle cannot be found")
-			return
-		end
+	if not handle then
+		tool:Destroy()
+		warn("handle cannot be found")
+		return
+	end
 
-		-- Some handle properties
-		handle.Name = "Handle"
-		handle.Anchored = false
-		handle.CanCollide = false
-		handle.Massless = true
-		handle.Parent = tool
+	-- Some handle properties
+	handle.Name = "Handle"
+	handle.Anchored = false
+	handle.CanCollide = false
+	handle.Massless = true
+	handle.Parent = tool
 
-		handle:FindFirstChild("Attachment"):Destroy() -- Destroy the proximity prompt so it won't display the prompt when tool is equipped (the proximity prompt is parented under 'Attachment')
+	handle:FindFirstChild("Attachment"):Destroy() -- Destroy the proximity prompt so it won't display the prompt when tool is equipped (the proximity prompt is parented under 'Attachment')
 
-		for _, part in ipairs(modelClone:GetChildren()) do
-			if part:IsA("BasePart") == false or part == handle then return end -- If the part isn't a BasePart or the part is the handle don't apply the codes below
+	for _, part in ipairs(modelClone:GetChildren()) do
+		if part:IsA("BasePart") == false or part == handle then return end -- If the part isn't a BasePart or the part is the handle don't apply the codes below
 
-			-- Apply the same properties for any other possible part that is parented to the cloned model
-			part.Anchored = false
-			part.CanCollide = false
-			part.Massless = true
-			part.Parent = tool
+		-- Apply the same properties for any other possible part that is parented to the cloned model
+		part.Anchored = false
+		part.CanCollide = false
+		part.Massless = true
+		part.Parent = tool
 
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = handle
-			weld.Part1 = part
-			weld.Parent = handle
-		end
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = handle
+		weld.Part1 = part
+		weld.Parent = handle
+	end
 
-		ScriptUtils.cloneScript(ServerStorage, "glassWeldScript", tool) -- Clones an already written weld script for the glass and parents it to the tool
-		tool.Parent = player.Backpack -- Finally parents the tool into the players backpack
-
-	end)
+	ScriptUtils.cloneScript(ServerStorage, "glassWeldScript", tool) -- Clones an already written weld script for the glass and parents it to the tool
+	tool.Parent = player.Backpack -- Finally parents the tool into the players backpack
 end
 
 -- Add every function into the "ACTIONS" table
